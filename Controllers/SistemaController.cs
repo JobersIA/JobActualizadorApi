@@ -1,4 +1,18 @@
+//╔═══════════════════════════════════════════════════════════╗
+//║       ██╗ ██████╗ ██████╗ ███████╗██████╗ ███████╗        ║
+//║       ██║██╔═══██╗██╔══██╗██╔════╝██╔══██╗██╔════╝        ║
+//║       ██║██║   ██║██████╔╝█████╗  ██████╔╝███████╗        ║
+//║  ██   ██║██║   ██║██╔══██╗██╔══╝  ██╔══██╗╚════██║        ║
+//║  ╚█████╔╝╚██████╔╝██████╔╝███████╗██║  ██║███████║        ║
+//║   ╚════╝  ╚═════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝        ║
+//╚═══════════════════════════════════════════════════════════╝
+//10-12-2025: SistemaController.cs
+//Autor: Ramón San Félix Ramón
+//Email: rsanfelix@jobers.net
+//Teléfono: 626 99 09 26
+
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using JobActualizadorApi.Models;
 
 namespace JobActualizadorApi.Controllers
@@ -10,31 +24,49 @@ namespace JobActualizadorApi.Controllers
         private readonly IWebHostEnvironment _env;
         private readonly IConfiguration _configuration;
 
-        // Almacenamiento en memoria para las versiones (en produccion seria una BD)
-        private static Dictionary<string, AppVersionInfo> _versionStore = new()
-        {
-            ["Android"] = new AppVersionInfo
-            {
-                VersionActual = "1.0.1",
-                VersionMinima = "1.0.0",
-                UrlDescarga = "http://localhost:5000/api/Sistema/Download/JobActualizador101.apk",
-                NotasVersion = "Primera version de prueba del sistema de autoactualizacion",
-                ActualizacionForzada = false
-            },
-            ["iOS"] = new AppVersionInfo
-            {
-                VersionActual = "1.0.1",
-                VersionMinima = "1.0.0",
-                UrlDescarga = "",
-                NotasVersion = "Primera version de prueba",
-                ActualizacionForzada = false
-            }
-        };
+        // Almacenamiento en memoria para las versiones (inicializado desde appsettings.json)
+        private static Dictionary<string, AppVersionInfo>? _versionStore;
+        private static readonly object _lock = new();
 
-        public SistemaController(IWebHostEnvironment env, IConfiguration configuration)
+        public SistemaController(
+            IWebHostEnvironment env,
+            IConfiguration configuration,
+            IOptions<Dictionary<string, AppVersionInfo>> appVersionsOptions)
         {
             _env = env;
             _configuration = configuration;
+
+            // Inicializar el store solo una vez desde la configuracion
+            lock (_lock)
+            {
+                if (_versionStore == null)
+                {
+                    _versionStore = appVersionsOptions.Value ?? GetDefaultVersions();
+                }
+            }
+        }
+
+        private static Dictionary<string, AppVersionInfo> GetDefaultVersions()
+        {
+            return new Dictionary<string, AppVersionInfo>
+            {
+                ["Android"] = new AppVersionInfo
+                {
+                    VersionActual = "1.0.0",
+                    VersionMinima = "1.0.0",
+                    UrlDescarga = "",
+                    NotasVersion = "Version por defecto",
+                    ActualizacionForzada = false
+                },
+                ["iOS"] = new AppVersionInfo
+                {
+                    VersionActual = "1.0.0",
+                    VersionMinima = "1.0.0",
+                    UrlDescarga = "",
+                    NotasVersion = "Version por defecto",
+                    ActualizacionForzada = false
+                }
+            };
         }
 
         /// <summary>
@@ -45,7 +77,7 @@ namespace JobActualizadorApi.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public IActionResult GetAppVersion(string plataforma)
         {
-            if (_versionStore.TryGetValue(plataforma, out var versionInfo))
+            if (_versionStore!.TryGetValue(plataforma, out var versionInfo))
             {
                 return Ok(versionInfo);
             }
@@ -54,7 +86,7 @@ namespace JobActualizadorApi.Controllers
         }
 
         /// <summary>
-        /// Actualiza la informacion de version para una plataforma
+        /// Actualiza la informacion de version para una plataforma (en memoria)
         /// </summary>
         [HttpPut]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
@@ -66,7 +98,7 @@ namespace JobActualizadorApi.Controllers
                 return BadRequest(new { error = "El request no puede ser nulo" });
             }
 
-            _versionStore[request.Plataforma] = new AppVersionInfo
+            _versionStore![request.Plataforma] = new AppVersionInfo
             {
                 VersionActual = request.VersionActual,
                 VersionMinima = request.VersionMinima,
@@ -75,7 +107,29 @@ namespace JobActualizadorApi.Controllers
                 ActualizacionForzada = request.ActualizacionForzada
             };
 
-            return Ok(new { success = true, message = "Version actualizada correctamente" });
+            return Ok(new { success = true, message = "Version actualizada correctamente (en memoria)" });
+        }
+
+        /// <summary>
+        /// Recarga la configuracion desde appsettings.json
+        /// </summary>
+        [HttpPost]
+        [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+        public IActionResult ReloadConfig()
+        {
+            lock (_lock)
+            {
+                var section = _configuration.GetSection("AppVersions");
+                var newConfig = section.Get<Dictionary<string, AppVersionInfo>>();
+
+                if (newConfig != null && newConfig.Count > 0)
+                {
+                    _versionStore = newConfig;
+                    return Ok(new { success = true, message = "Configuracion recargada desde appsettings.json", versions = _versionStore });
+                }
+
+                return Ok(new { success = false, message = "No se encontro configuracion, manteniendo valores actuales" });
+            }
         }
 
         /// <summary>

@@ -6,19 +6,27 @@
 //║  ╚█████╔╝╚██████╔╝██████╔╝███████╗██║  ██║███████║        ║
 //║   ╚════╝  ╚═════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝        ║
 //╚═══════════════════════════════════════════════════════════╝
-//10-12-2025: AppVersionInfo.cs
+//10-12-2025: AppVersionSettings.cs
 //Autor: Ramón San Félix Ramón
 //Email: rsanfelix@jobers.net
 //Teléfono: 626 99 09 26
 
 namespace JobActualizadorApi.Models
 {
-    public class AppVersionInfo
+    /// <summary>
+    /// Configuracion de version de la API (para endpoint /api/version)
+    /// </summary>
+    public class ApiVersionSettings
     {
-        public required string VersionActual { get; set; }
-        public required string VersionMinima { get; set; }
-        public required string UrlDescarga { get; set; }
-        public required string NotasVersion { get; set; }
-        public bool ActualizacionForzada { get; set; }
+        public string[] CompatibleVersions { get; set; } = ["1.0.0"];
+        public string MinClientVersion { get; set; } = "1.0.0";
+    }
+
+    /// <summary>
+    /// Configuracion de versiones de la app por plataforma
+    /// </summary>
+    public class AppVersionSettings
+    {
+        public Dictionary<string, AppVersionInfo> Versions { get; set; } = new();
     }
 }
